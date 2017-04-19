@@ -4,6 +4,7 @@ import javax.persistence.Column;
 import javax.persistence.Entity;
 import javax.persistence.GeneratedValue;
 import javax.persistence.Id;
+import java.util.Date;
 
 @Entity
 public class Tweet {
@@ -12,10 +13,12 @@ public class Tweet {
     private Long id;
     @Column(nullable = false)
     private String publisher;
-    @Column(nullable = false, length = 140)
+    @Column(nullable = false)
     private String tweet;
-    @Column (nullable=true)
+    @Column
     private Long pre2015MigrationStatus = 0L;
+    @Column
+    private Date discardDate;
 
     public Tweet() {
     }
@@ -50,6 +53,14 @@ public class Tweet {
 
     public void setPre2015MigrationStatus(Long pre2015MigrationStatus) {
         this.pre2015MigrationStatus = pre2015MigrationStatus;
+    }
+
+    public Date getDiscardDate() {
+        return discardDate;
+    }
+
+    public void setDiscardDate(Date discardDate) {
+        this.discardDate = discardDate;
     }
 
 }

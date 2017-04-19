@@ -1,7 +1,9 @@
 package com.scmspain.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.scmspain.common.TestUtils;
 import com.scmspain.configuration.TestConfiguration;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -14,10 +16,14 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.web.context.WebApplicationContext;
 
+import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 
 import static java.lang.String.format;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.http.HttpStatus.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -32,38 +38,89 @@ public class TweetControllerTest {
 
     @Before
     public void setUp() {
-        this.mockMvc = webAppContextSetup(this.context).build();
+        mockMvc = webAppContextSetup(context).build();
+    }
+
+    @After
+    public void tearDown() throws Exception {
+        mockMvc.perform(deleteAllTweet());
     }
 
     @Test
     public void shouldReturn200WhenInsertingAValidTweet() throws Exception {
-        mockMvc.perform(newTweet("Prospect", "Breaking the law"))
-            .andExpect(status().is(201));
+        addTweetWithTextAndExpect(TestUtils.VALID_TWEET_TEXT, CREATED.value());
     }
 
     @Test
     public void shouldReturn400WhenInsertingAnInvalidTweet() throws Exception {
-        mockMvc.perform(newTweet("Schibsted Spain", "We are Schibsted Spain (look at our home page http://www.schibsted.es/), we own Vibbo, InfoJobs, fotocasa, coches.net and milanuncios. Welcome!"))
-                .andExpect(status().is(400));
+        addTweetWithTextAndExpect(TestUtils.INVALID_LENGTH_TWEET_TEXT, BAD_REQUEST.value());
     }
 
     @Test
-    public void shouldReturnAllPublishedTweets() throws Exception {
-        mockMvc.perform(newTweet("Yo", "How are you?"))
-                .andExpect(status().is(201));
+    public void shouldReturnAllPublishedTweetsInDescOrderWithoutDiscarded() throws Exception {
+        addTwoTweets();
+        discardTweet(1L);
 
-        MvcResult getResult = mockMvc.perform(get("/tweet"))
-                .andExpect(status().is(200))
-                .andReturn();
+        List contentList = getListFromEndpoint("/tweet");
+        int firstId = (int) ((Map) contentList.get(0)).get("id");
 
-        String content = getResult.getResponse().getContentAsString();
-        assertThat(new ObjectMapper().readValue(content, List.class).size()).isEqualTo(1);
+        int expectedId = 5;
+        assertThat(contentList.size()).isEqualTo(2);
+        assertThat(firstId).isEqualTo(expectedId);
     }
 
-    private MockHttpServletRequestBuilder newTweet(String publisher, String tweet) {
+    @Test
+    public void shouldReturnAllDiscardedTweetsInDescOrder() throws Exception {
+        addTwoTweets();
+        discardTweet(1L);
+        discardTweet(2L);
+
+        List contentList = getListFromEndpoint("/discardedList");
+        int firstId = (int) ((Map) contentList.get(0)).get("id");
+
+        int expectedId = 2;
+        assertThat(contentList.size()).isEqualTo(1);
+        assertThat(firstId).isEqualTo(expectedId);
+    }
+
+    private MockHttpServletRequestBuilder newTweetRequest(String publisher, String tweet) {
         return post("/tweet")
                 .contentType(MediaType.APPLICATION_JSON_UTF8)
                 .content(format("{\"publisher\": \"%s\", \"tweet\": \"%s\"}", publisher, tweet));
     }
 
+    private MockHttpServletRequestBuilder discardTweetRequest(Long id) {
+        return delete("/tweet")
+                .contentType(MediaType.APPLICATION_JSON_UTF8)
+                .content(format("{\"id\": \"%d\"}", id));
+    }
+
+    private MockHttpServletRequestBuilder deleteAllTweet() {
+        return delete("/deleteAll");
+    }
+
+    private List getListFromEndpoint(String endpoint) throws Exception {
+        String content = mockMvc.perform(get(endpoint))
+                .andExpect(status().is(OK.value()))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+        return new ObjectMapper().readValue(content, List.class);
+    }
+
+    private void addTwoTweets() throws Exception {
+        mockMvc.perform(newTweetRequest(TestUtils.VALID_PUBLISHER_NAME, TestUtils.VALID_TWEET_TEXT))
+                .andExpect(status().is(CREATED.value()));
+        mockMvc.perform(newTweetRequest(TestUtils.VALID_PUBLISHER_NAME, TestUtils.VALID_TWEET_TEXT))
+                .andExpect(status().is(CREATED.value()));
+    }
+
+    private void addTweetWithTextAndExpect(String validTweetText, int value) throws Exception {
+        mockMvc.perform(newTweetRequest(TestUtils.VALID_PUBLISHER_NAME, validTweetText))
+                .andExpect(status().is(value));
+    }
+
+    private void discardTweet(Long id) throws Exception {
+        mockMvc.perform(discardTweetRequest(id)).andExpect(status().is(NO_CONTENT.value()));
+    }
 }
